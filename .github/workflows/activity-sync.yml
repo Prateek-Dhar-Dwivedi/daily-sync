@@ -1,0 +1,121 @@
+name: Prateek-Dhar-Dwivedi
+on:
+  schedule:
+    # Runs 3 times a day (Morning, Afternoon, Evening in IST)
+    # UTC times: 3:30 AM, 9:30 AM, 3:30 PM -> IST: ~9:00 AM, ~3:00 PM, ~9:00 PM
+    - cron: '30 3,9,15 * * *'
+  workflow_dispatch:
+
+jobs:
+  organic-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TZ: 'Asia/Kolkata' # Force Indian Standard Time
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "Prateek-Dhar-Dwivedi"
+          git config --global user.email "prateekdhardwivedi10@gmail.com"
+
+      - name: 'Decision Engine: Should we work?'
+        id: decision
+        run: |
+          # 1. TIME CHECK (IST)
+          HOUR=$(date +%H)
+          DAY=$(date +%u) # 1=Mon, 7=Sun
+          
+          echo "Current time (IST): $(date)"
+          
+          # 2. WEEKEND LOGIC
+          # On Sat/Sun, 80% chance to take a break
+          if [ $DAY -ge 6 ]; then
+             ROLL=$(( RANDOM % 10 ))
+             if [ $ROLL -lt 8 ]; then
+                echo "It's the weekend. Taking a break."
+                echo "skip=true" >> $GITHUB_OUTPUT
+                exit 0
+             fi
+          fi
+
+          # 3. WEEKDAY VARIANCE
+          # Even on weekdays, skip 20% of slots to look natural
+          ROLL=$(( RANDOM % 10 ))
+          if [ $ROLL -lt 2 ]; then
+             echo "Skipping this session for natural variance."
+             echo "skip=true" >> $GITHUB_OUTPUT
+             exit 0
+          fi
+
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+      - name: Simulate Development Work
+        if: steps.decision.outputs.skip == 'false'
+        run: |
+          # Create sync directories
+          mkdir -p .sync/logs .sync/metrics .sync/reports
+
+          # Randomly decide how many commits (1 to 3)
+          WORK_LOAD=$(( ( RANDOM % 3 ) + 1 ))
+          echo "Simulating $WORK_LOAD tasks..."
+
+          for i in $(seq 1 $WORK_LOAD); do
+            
+            # --- TASK 1: UPDATE LOGS ---
+            if [ $(( RANDOM % 2 )) -eq 0 ]; then
+              FILE=".sync/logs/trace.log"
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - System trace" >> $FILE
+              git add $FILE
+            
+            # --- TASK 2: UPDATE METRICS ---
+            else
+              FILE=".sync/metrics/system.json"
+              echo "{ \"timestamp\": \"$(date +%s)\", \"status\": \"ok\", \"load\": $RANDOM }" > $FILE
+              git add $FILE
+            fi
+
+            # --- GENERATE RELEVANT COMMIT MESSAGE (AI/ML & Full-Stack) ---
+            MESSAGES=(
+              "feat(model): update evaluation metrics"
+              "fix(core): optimize sync interval"
+              "docs: update daily tracking logs"
+              "chore: update dependencies and benchmarks"
+              "refactor: improve data preprocessing pipeline"
+              "perf: reduce memory footprint in inference"
+              "style: formatting updates"
+              "test: update validation test cases"
+              "ci: adjust workflow timing"
+              "feat(api): optimize response payload"
+            )
+            
+            # Pick a random message
+            MSG=${MESSAGES[$RANDOM % ${#MESSAGES[@]}]}
+            
+            # Commit
+            git commit -m "$MSG"
+            
+            # Sleep 5-15 seconds between commits
+            sleep $(( ( RANDOM % 10 ) + 5 ))
+            
+          done
+
+      - name: Push Changes
+        if: steps.decision.outputs.skip == 'false'
+        run: git push
+
+      - name: Weekly Housekeeping
+        if: steps.decision.outputs.skip == 'false'
+        run: |
+          # Cleanup old logs on Sundays
+          if [ $(date +%u) -eq 7 ]; then
+             find .sync/logs -name "*.log" -type f -mtime +14 -delete
+             git add .sync/logs
+             git diff --staged --quiet || (git commit -m "chore: prune old logs" && git push)
+          fi
